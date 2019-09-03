@@ -9,7 +9,8 @@ header = ['vendor', 'file_path', 'temperature', 'repeat times',
 		'command window size mean', 'command window size std',
 		'min command window size', 'command delay mean',
 		'max nok size mean', 'max nok size std', 'min nok size',
-		'scan time mean', 'scan time std', 'max scan time']
+		'scan time mean', 'scan time std', 'max scan time',
+		'window arrange', 'window width', 'window flag']
 
 def compute_distribution(list):
 	if len(list) == 0:
@@ -53,6 +54,7 @@ def seperate_by_temperature(all_info_list):
 		temp0 = all_info_list[i][0]
 		temp1 = all_info_list[i][1]
 		if temp0 - temp1 > 5000:
+			print(temp0, temp1)
 			continue
 		if temp0 < 0:
 			temp_0_list.append(all_info_list[i])
@@ -83,13 +85,14 @@ def seperate_by_temperature(all_info_list):
 	classf_by_temp_list.append(temp_70_list)
 	return classf_by_temp_list
 
-def statistic_win_info(classf_by_temp_list):
+def statistic_win_info(classf_by_temp_list, width_dict, arrange_dict, flag_dict):
 	statistic_win_info_list = []
 	statistic_per_temp_info_list = []
 	min_best_size = 0
 	min_nok_size = 0
 	repeat_times = 0
 	max_scan_time = 0
+	temp_list = [-5,5,15,25,35,45,55,65,75]
 
 	for i in range(0, len(classf_by_temp_list)):
 		statistic_per_temp_info_list = []
@@ -98,6 +101,7 @@ def statistic_win_info(classf_by_temp_list):
 		cmd_delay_list = []
 		max_nok_size_list = []
 		scan_time_list = []
+		key = temp_list[i]
 		for j in range(0, len(classf_by_temp_list[i])):
 			best_start_list.append(classf_by_temp_list[i][j][2])
 			best_size_list.append(classf_by_temp_list[i][j][3])
@@ -129,43 +133,52 @@ def statistic_win_info(classf_by_temp_list):
 		statistic_per_temp_info_list.append(scan_time_mean)
 		statistic_per_temp_info_list.append(scan_time_std)
 		statistic_per_temp_info_list.append(max_scan_time)
+		statistic_per_temp_info_list.append(arrange_dict[key])
+		statistic_per_temp_info_list.append(width_dict[key])
+		statistic_per_temp_info_list.append(flag_dict[key])
 		statistic_win_info_list.append(statistic_per_temp_info_list)
 	return statistic_win_info_list
 
-def scrub_window_arrange(per_str_info_list):
+def scrub_window_arrange(per_str_info_list, temp_list):
 	window_width_list = []
 	window_flag_list = []
 	window_string_list = []
-	if len(per_str_info_list) == 0:
-		print('err: per info str list not exist')
-		return per_str_info_list
+	width = 1
+	try: 
+		temp = int(per_str_info_list[-1], 10)
+		index = temp_list.index(temp)
+	except:
+		return 0, 0, 0, 0
+
 	for i in range(0, len(per_str_info_list)):
 		if 'cmd delay' in per_str_info_list[i]:
 			window_flag_list.append(per_str_info_list[i].split()[-1])
-			if '--' in per_str_info[i]:
-				line_list = per_str_info[i].split()
+			if '--' in per_str_info_list[i]:
+				line_list = per_str_info_list[i].split()
 				s_index = line_list.index('--')
 				begin = int(line_list[s_index - 1], 16)
 				end = int(line_list[s_index + 1], 16)
 				window_width = end - begin + 1
 				window_width_list.append(window_width)
 				window_string = line_list[s_index - 1] + line_list[s_index] + line_list[s_index+1]
-				print(window_string)
 				window_string_list.append(window_string)
 			else:
-				line_list = per_str_info[i].split()
-				window_windth_list.append(1)
-				window_string_list.append(line_list[-3])
-		else 'temp0' in per_str_info_list[i]:
-			temperature = int(per_str_info_list[i].split()[0],10)
-	return window_width_list, window_string_list, window_flag_list, temperature
+				line_list = per_str_info_list[i].split()
+				window_width_list.append(width)
+				window_string_list.append(line_list[-4])
+	return index, window_width_list, window_string_list, window_flag_list
 
-def sparse_lines(lines):
+def scrub_window_arrange_list(lines, temp_list):
 	start = 0
-	temp = 'temp0'
-	scan_end = 'Emmc scan command window'
-	all_info_win_set_list = []
+	#scan_end = 'Emmc scan command window'
+	#temp = 'temp0'
+	temp = "scan time distance"
+	scan_end = "temp1"
+
 	per_info_str_list = []
+	width_l = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+	string_l = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+	flag_l = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 	for line in lines:
 		per_info_win_list = []
 		if temp in line:
@@ -175,52 +188,45 @@ def sparse_lines(lines):
 		if start == 1:
 			per_info_str_list.append(line)
 		if start == 0 and len(per_info_str_list) > 0:
-			try:
-				window_width_list, window_string_list, window_flag_list,temperature = scrub_window_arrange(per_info_str_list)
-			except:
-				pass
-	return window_width_list, window_string_list, window_flag_list
+			index, width_list, string_list, flag_list = scrub_window_arrange(per_info_str_list, temp_list)
+			per_info_str_list = []
+			if width_list == 0:
+				continue
+			width_l[index] = width_list
+			string_l[index] = string_list
+			flag_l[index] = flag_list
+	return width_l, string_l, flag_l
 
-def construct_arrange_list(temperature, window_width_list, window_string_list, window_flag_list):
-	classf_by_temp_list = []
-	temp_0_list = []
-	temp_5_list = []
-	temp_15_list = []
-	temp_25_list = []
-	temp_35_list = []
-	temp_45_list = []
-	temp_55_list = []
-	temp_65_list = []
-	temp_70_list = []
-	temp0 = temperature
-		if temp0 < 0:
-			temp_0_list.append(all_info_list[i])
-		elif  temp0 > 0 and temp0 < 10000:
-			temp_5_list.append(all_info_list[i])
-		elif  temp0 > 10000 and temp0 < 20000:
-			temp_15_list.append(all_info_list[i])
-		elif  temp0 > 20000 and temp0 < 30000:
-			temp_25_list.append(all_info_list[i])
-		elif  temp0 > 30000 and temp0 < 40000:
-			temp_35_list.append(all_info_list[i])
-		elif  temp0 > 40000 and temp0 < 50000:
-			temp_45_list.append(all_info_list[i])
-		elif  temp0 > 50000 and temp0 < 60000:
-			temp_55_list.append(all_info_list[i])
-		elif  temp0 > 60000 and temp0 < 70000:
-			temp_65_list.append(all_info_list[i])
-		else :
-			temp_70_list.append(all_info_list[i])
-	classf_by_temp_list.append(temp_0_list)
-	classf_by_temp_list.append(temp_5_list)
-	classf_by_temp_list.append(temp_15_list)
-	classf_by_temp_list.append(temp_25_list)
-	classf_by_temp_list.append(temp_35_list)
-	classf_by_temp_list.append(temp_45_list)
-	classf_by_temp_list.append(temp_55_list)
-	classf_by_temp_list.append(temp_65_list)
-	classf_by_temp_list.append(temp_70_list)
-	return classf_by_temp_list
+def scrub_closest_temp_list(lines):
+	find_temp = 0
+	temp_list = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+	temp = 0
+	for line in lines:
+		if 'temp0' in line:
+			find_temp = 1
+		elif find_temp == 1:
+			try:
+				temp = int(line, 10)
+			except:
+				find_temp = 0
+				continue
+			find_temp = 0
+			index = temp / 10000 + 1
+			index = max(0, index)
+			index = min(8, index)
+			mid_temp = (10 * index - 5) * 1000
+			if abs(temp_list[index] - mid_temp) > abs(temp - mid_temp):
+				temp_list[index] = temp 
+	return temp_list
+
+def build_window_shift_result(lines):
+	temp_key_list = [-5, 5, 15, 25, 35, 45, 55, 65, 75]
+	temp_list = scrub_closest_temp_list(lines)
+	width_l, string_l, flag_l = scrub_window_arrange_list(lines, temp_list)
+	width_dict = dict(zip(temp_key_list, width_l))
+	string_dict = dict(zip(temp_key_list, string_l))
+	flag_dict = dict(zip(temp_key_list, flag_l))
+	return width_dict, string_dict, flag_dict
 
 def sparse_str_list(per_str_info_list):
 	per_win_info_list = []
@@ -233,8 +239,9 @@ def sparse_str_list(per_str_info_list):
 	for i in range(0, len(per_str_info_list)):
 		if 'temp0' in per_str_info_list[i]:
 			temp0 = int(per_str_info_list[i+1], 10)
-		elif 'temp1' in per_str_info_list[i]:
-			temp1 = int(per_str_info_list[i+1], 10)
+		#elif 'temp1' in per_str_info_list[i]:
+			#temp1 = int(per_str_info_list[i+1], 10)
+			temp1 = temp0
 		elif 'best_start' in per_str_info_list[i]:
 			line_list = per_str_info_list[i].split()
 			index =	line_list.index('best_start')
@@ -254,17 +261,20 @@ def sparse_str_list(per_str_info_list):
 	per_win_info_list.append(cmd_delay)
 	per_win_info_list.append(max_nok_size)
 	per_win_info_list.append(scan_time)
+	print(per_win_info_list)
 	return per_win_info_list
 
 def sparse_file(lines):
 	start = 0
 	temp = 'temp0'
-	scan_end = 'Emmc scan command window'
+	search_start = "scan time distance"
+	scan_end = 'temp1'
 	all_info_win_set_list = []
 	per_info_str_list = []
+	width_dict, arrange_dict, flag_dict= build_window_shift_result(lines)
 	for line in lines:
 		per_info_win_list = []
-		if temp in line:
+		if search_start in line:
 			start = 1
 		elif scan_end in line:
 			start = 0
@@ -279,8 +289,8 @@ def sparse_file(lines):
 		if len(per_info_win_list) > 0:
 			all_info_win_set_list.append(per_info_win_list)
 	classf_by_temp_list = seperate_by_temperature(all_info_win_set_list)
-	statis_win_info_list = statistic_win_info(classf_by_temp_list)
-	return classf_by_temp_list, statis_win_info_list
+	statis_win_info_list = statistic_win_info(classf_by_temp_list, width_dict, arrange_dict, flag_dict)
+	return statis_win_info_list
 
 def get_nok_size(per_str_info):
 	if '--' in per_str_info:
@@ -313,13 +323,7 @@ def construct_row_info(statis_win_info_list):
 	all_temp_list = []
 	for i in range(0, len(statis_win_info_list)):
 		row_list = []
-		if i == 0:
-			row_list.append('below 0 degree')
-		elif i == 8:
-			row_list.append('upper 70 degree')
-		else:
-			temp_str = str((i - 1) * 10) + '--' + str(i * 10 - 1) + ' degree'
-			row_list.append(temp_str)
+		row_list.append(i*10-5)
 		row_list.extend(statis_win_info_list[i])
 		all_temp_list.append(row_list)
 	return all_temp_list
@@ -338,17 +342,16 @@ def main():
 				head_info_per_row.append(' ')
 				head_info_per_row.append(file)
 				lines = log_file.readlines()
-				try:
-					classf_by_temp_list, statis_win_info_list = sparse_file(lines)
+				if 1:
+					statis_win_info_list = sparse_file(lines)
 					construct_row_list = construct_row_info(statis_win_info_list)
 					for row_list in construct_row_list:
 						statistic_info_per_row = []
 						statistic_info_per_row.extend(head_info_per_row)
 						statistic_info_per_row.extend(row_list)
 						writer.writerow(statistic_info_per_row)
-				except:
-					print('error: %s sparse failed' %(file))
-					continue
-
-
-main()
+				#except:
+				#	print('error: %s sparse failed' %(file))
+				#	continue
+if __name__ == '__main__':
+	main()
