@@ -3,11 +3,14 @@ import time
 import sys
 import csv
 import math
+import re
 
 header = ['vendor', 'file_path', 'temperature', 'repeat times',
 		'command window start mean', 'command window start std',
 		'command window size mean', 'command window size std',
 		'min command window size', 'command delay mean',
+		'ds shift mean', 'ds_shift std',
+		'data window size mean', 'data window size std',
 		'max nok size mean', 'max nok size std', 'min nok size',
 		'scan time mean', 'scan time std', 'max scan time',
 		'window arrange', 'window width', 'window flag']
@@ -58,21 +61,21 @@ def seperate_by_temperature(all_info_list):
 			continue
 		if temp0 < 0:
 			temp_0_list.append(all_info_list[i])
-		elif  temp0 > 0 and temp0 < 10000:
+		elif  temp0 >= 0 and temp0 < 10000:
 			temp_5_list.append(all_info_list[i])
-		elif  temp0 > 10000 and temp0 < 20000:
+		elif  temp0 >= 10000 and temp0 < 20000:
 			temp_15_list.append(all_info_list[i])
-		elif  temp0 > 20000 and temp0 < 30000:
+		elif  temp0 >= 20000 and temp0 < 30000:
 			temp_25_list.append(all_info_list[i])
-		elif  temp0 > 30000 and temp0 < 40000:
+		elif  temp0 >= 30000 and temp0 < 40000:
 			temp_35_list.append(all_info_list[i])
-		elif  temp0 > 40000 and temp0 < 50000:
+		elif  temp0 >= 40000 and temp0 < 50000:
 			temp_45_list.append(all_info_list[i])
-		elif  temp0 > 50000 and temp0 < 60000:
+		elif  temp0 >= 50000 and temp0 < 60000:
 			temp_55_list.append(all_info_list[i])
-		elif  temp0 > 60000 and temp0 < 70000:
+		elif  temp0 >= 60000 and temp0 < 70000:
 			temp_65_list.append(all_info_list[i])
-		else :
+		else:
 			temp_70_list.append(all_info_list[i])
 	classf_by_temp_list.append(temp_0_list)
 	classf_by_temp_list.append(temp_5_list)
@@ -92,15 +95,22 @@ def statistic_win_info(classf_by_temp_list, width_dict, arrange_dict, flag_dict)
 	min_nok_size = 0
 	repeat_times = 0
 	max_scan_time = 0
+	ds_sht = 0
+	window_size = 0
 	temp_list = [-5,5,15,25,35,45,55,65,75]
 
 	for i in range(0, len(classf_by_temp_list)):
+		min_best_size = 0
+		min_nok_size = 0
+		max_scan_time = 0
 		statistic_per_temp_info_list = []
 		best_start_list = []
 		best_size_list = []
 		cmd_delay_list = []
 		max_nok_size_list = []
 		scan_time_list = []
+		ds_sht_list = []
+		window_size_list = []
 		key = temp_list[i]
 		for j in range(0, len(classf_by_temp_list[i])):
 			best_start_list.append(classf_by_temp_list[i][j][2])
@@ -108,6 +118,8 @@ def statistic_win_info(classf_by_temp_list, width_dict, arrange_dict, flag_dict)
 			cmd_delay_list.append(classf_by_temp_list[i][j][4])
 			max_nok_size_list.append(classf_by_temp_list[i][j][5]) 
 			scan_time_list.append(classf_by_temp_list[i][j][6])
+			ds_sht_list.append(classf_by_temp_list[i][j][7])
+			window_size_list.append(classf_by_temp_list[i][j][8])
 		repeat_times = len(best_start_list)
 		if len(best_size_list) > 0:
 			min_best_size = min(best_size_list)
@@ -120,6 +132,8 @@ def statistic_win_info(classf_by_temp_list, width_dict, arrange_dict, flag_dict)
 		cmd_delay_mean, cmd_delay_std = compute_distribution(cmd_delay_list)
 		max_nok_size_mean, max_nok_size_std = compute_distribution(max_nok_size_list)
 		scan_time_mean, scan_time_std = compute_distribution(scan_time_list)
+		ds_sht_mean, ds_sht_std = compute_distribution(ds_sht_list)
+		window_size_mean, window_size_std = compute_distribution(window_size_list)
 		statistic_per_temp_info_list.append(repeat_times)
 		statistic_per_temp_info_list.append(best_start_mean)
 		statistic_per_temp_info_list.append(best_start_std)
@@ -127,6 +141,10 @@ def statistic_win_info(classf_by_temp_list, width_dict, arrange_dict, flag_dict)
 		statistic_per_temp_info_list.append(best_size_std)
 		statistic_per_temp_info_list.append(min_best_size)
 		statistic_per_temp_info_list.append(cmd_delay_mean)
+		statistic_per_temp_info_list.append(ds_sht_mean)
+		statistic_per_temp_info_list.append(ds_sht_std)
+		statistic_per_temp_info_list.append(window_size_mean)
+		statistic_per_temp_info_list.append(window_size_std)
 		statistic_per_temp_info_list.append(max_nok_size_mean)
 		statistic_per_temp_info_list.append(max_nok_size_std)
 		statistic_per_temp_info_list.append(min_nok_size)
@@ -170,10 +188,10 @@ def scrub_window_arrange(per_str_info_list, temp_list):
 
 def scrub_window_arrange_list(lines, temp_list):
 	start = 0
-	#scan_end = 'Emmc scan command window'
-	#temp = 'temp0'
-	temp = "scan time distance"
-	scan_end = "temp1"
+	scan_end = 'Emmc scan command window'
+	temp = 'temp0'
+	#temp = "scan time distance"
+	#scan_end = "temp1"
 
 	per_info_str_list = []
 	width_l = [0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -233,6 +251,7 @@ def sparse_str_list(per_str_info_list):
 	max_nok_size = 0
 	win_range_list = []
 	win_flag_list = []
+	pattern = re.compile(r'\d+')
 	if len(per_str_info_list) == 0:
 		print('err: per info str list not exist')
 		return per_str_info_list
@@ -254,6 +273,10 @@ def sparse_str_list(per_str_info_list):
 		elif 'scan time' in per_str_info_list[i]:
 			line_list = per_str_info_list[i].split()
 			scan_time = int(line_list[-2], 10) / 1000000.0
+		elif 'ds_sht' in per_str_info_list[i]:
+			line_list = per_str_info_list[i].split()
+			ds_sht = int(pattern.findall(line_list[3])[0], 10)
+			window = int(pattern.findall(line_list[4])[0], 10)
 	per_win_info_list.append(temp0)
 	per_win_info_list.append(temp1)
 	per_win_info_list.append(best_start)
@@ -261,17 +284,19 @@ def sparse_str_list(per_str_info_list):
 	per_win_info_list.append(cmd_delay)
 	per_win_info_list.append(max_nok_size)
 	per_win_info_list.append(scan_time)
-	print(per_win_info_list)
+	per_win_info_list.append(ds_sht)
+	per_win_info_list.append(window)
 	return per_win_info_list
 
 def sparse_file(lines):
 	start = 0
 	temp = 'temp0'
-	search_start = "scan time distance"
+	search_start = "ds_sht"
 	scan_end = 'temp1'
 	all_info_win_set_list = []
 	per_info_str_list = []
-	width_dict, arrange_dict, flag_dict= build_window_shift_result(lines)
+	width_dict, arrange_dict, flag_dict = build_window_shift_result(lines)
+	#print(width_dict, arrange_dict, flag_dict)
 	for line in lines:
 		per_info_win_list = []
 		if search_start in line:
@@ -332,7 +357,7 @@ def main():
 	rootdir = sys.argv[1]
 	file_list = list_all_files(rootdir)
 
-	with open('sm1_hs400_200m_temp_shift_distribution_file.csv', 'w') as f:
+	with open('tm2_hs400_200m_temp_shift_distribution_file.csv', 'w') as f:
 		writer = csv.writer(f)
 		writer.writerow(header)
 		for file in file_list:
